@@ -1,6 +1,6 @@
 // Altere aqui as informações principais da barbearia.
 const BARBERSHOP = {
-  whatsappNumber: "5538999999999", // Troque para o número real. Exemplo: 5538999799827
+  whatsappNumber: "5538998825000", // Troque para o número real. Exemplo: 5538999799827
   city: "Carbonita/MG",
 };
 
