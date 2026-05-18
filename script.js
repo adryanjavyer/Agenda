@@ -299,23 +299,20 @@ function ensureSelectedTimeIsAvailable() {
   }
 }
 
+
 // Regra de avanço automático:
-// Somente as duas primeiras telas do fluxo usam avanço automático após a escolha.
-// Tela 0 = Profissional | Tela 1 = Serviço.
-// A partir da tela 2, o usuário continua precisando clicar em "Continuar".
+// somente as duas primeiras telas do fluxo avançam ao clicar em uma opção.
+// Tela 1 = state.currentStep 0 | Tela 2 = state.currentStep 1.
 function shouldAutoAdvanceAfterOptionClick() {
   return state.currentStep === 0 || state.currentStep === 1;
 }
 
 function autoAdvanceAfterOptionClick() {
-  if (!shouldAutoAdvanceAfterOptionClick()) return;
-  if (!isCurrentStepValid()) return;
+  if (!shouldAutoAdvanceAfterOptionClick() || !isCurrentStepValid()) return;
 
-  // O setTimeout permite que a opção selecionada seja renderizada antes da troca de tela.
-  // Isso evita conflito visual e mantém o fluxo atual sem alterar o layout.
-  setTimeout(() => {
-    goNext();
-  }, 0);
+  state.currentStep += 1;
+  window.scrollTo({ top: 0, behavior: "smooth" });
+  updateUI();
 }
 
 function renderProfessionals() {
@@ -653,6 +650,11 @@ function updateUI() {
 
   progressFill.style.width = `${((Math.min(state.currentStep, 3) + 1) / 4) * 100}%`;
   backButton.classList.toggle("hidden", state.currentStep === 0);
+
+  // Botão "Continuar" removido visualmente apenas nas telas 1 e 2.
+  // Como essas telas avançam automaticamente ao selecionar uma opção, o botão não aparece nelas.
+  // A partir da tela 3, o botão volta a aparecer e o fluxo continua exigindo clique manual.
+  nextButton.style.display = state.currentStep === 0 || state.currentStep === 1 ? "none" : "";
   nextButton.disabled = !isCurrentStepValid();
   nextButton.innerHTML = state.currentStep === 3 ? "Finalizar agendamento <span>›</span>" : "Continuar <span>›</span>";
   footerActions.style.display = state.currentStep === 4 ? "none" : "block";
@@ -685,10 +687,9 @@ function goNext() {
 }
 
 function goBack() {
-  // Funcionamento do botão Voltar preservado:
-  // ele apenas reduz a etapa atual e atualiza a tela.
-  // Ele não chama a regra de avanço automático, por isso continua voltando normalmente
-  // mesmo quando a tela anterior possui avanço automático por clique.
+  // Funcionamento do botão "Voltar" preservado:
+  // ele sempre reduz uma etapa e não chama a regra de avanço automático.
+  // Assim, voltar para a tela 1 ou 2 não força o usuário a avançar novamente sem clicar em uma opção.
   if (state.currentStep > 0) {
     state.currentStep -= 1;
     updateUI();
@@ -764,8 +765,13 @@ function openEmbeddedAdminPanelFallback() {
 
   if (!adminOverlay) return;
 
+  // Abertura robusta do painel administrativo:
+  // aplica classe, estilo inline e aria-hidden para garantir que o painel fique visível
+  // mesmo em navegadores que sejam mais sensíveis ao clique dentro do menu suspenso.
+  adminOverlay.hidden = false;
   adminOverlay.classList.add("open");
   adminOverlay.style.display = "block";
+  adminOverlay.style.pointerEvents = "auto";
   adminOverlay.setAttribute("aria-hidden", "false");
   document.body.classList.add("admin-open");
 
@@ -784,9 +790,9 @@ function openEmbeddedAdminPanelFallback() {
     dashboardPanel.classList.add("active");
   }
 
-  setTimeout(() => {
+  requestAnimationFrame(() => {
     adminOverlay.scrollTo({ top: 0, behavior: "smooth" });
-  }, 0);
+  });
 }
 
 function closeEmbeddedAdminPanelFallback() {
@@ -795,6 +801,7 @@ function closeEmbeddedAdminPanelFallback() {
 
   adminOverlay.classList.remove("open");
   adminOverlay.style.display = "";
+  adminOverlay.style.pointerEvents = "";
   adminOverlay.setAttribute("aria-hidden", "true");
   document.body.classList.remove("admin-open");
 }
@@ -1355,22 +1362,29 @@ function initEmbeddedAdminPanel() {
     }
   }
 
-  function refreshAdminPanel() {
-    adminState.bookings = loadAdminBookings();
-    renderAdmin();
-  }
+  function openAdminPanel(event) {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
 
-  function openAdminPanel() {
     closeMoreMenu();
     refreshAdminPanel();
+
+    // Abertura principal do painel administrativo.
+    // Não depende mais de onclick no HTML; o clique no botão chama esta função pelo JavaScript.
+    adminOverlay.hidden = false;
     adminOverlay.classList.add("open");
     adminOverlay.style.display = "block";
+    adminOverlay.style.pointerEvents = "auto";
     adminOverlay.setAttribute("aria-hidden", "false");
     document.body.classList.add("admin-open");
+
     setActiveAdminTab(adminState.currentTab || "dashboard");
-    setTimeout(() => {
+
+    requestAnimationFrame(() => {
       adminOverlay.scrollTo({ top: 0, behavior: "smooth" });
-    }, 0);
+    });
   }
 
   function closeAdminPanel() {
@@ -1379,10 +1393,6 @@ function initEmbeddedAdminPanel() {
     adminOverlay.setAttribute("aria-hidden", "true");
     document.body.classList.remove("admin-open");
   }
-
-  window.refreshEmbeddedAdminPanel = refreshAdminPanel;
-  window.openEmbeddedAdminPanel = openAdminPanel;
-  window.closeEmbeddedAdminPanel = closeAdminPanel;
 
   function openMoreMenu() {
     moreMenuDropdown.hidden = false;
@@ -1409,17 +1419,18 @@ function initEmbeddedAdminPanel() {
     moreMenuDropdown.addEventListener("click", (event) => {
       event.stopPropagation();
     });
-
-    openAdminButton.addEventListener("click", (event) => {
+    const handleOpenAdminPanel = (event) => {
       event.preventDefault();
       event.stopPropagation();
-      openAdminPanel();
-    });
+      openAdminPanel(event);
+    };
 
-    closeAdminButton?.addEventListener("click", (event) => {
-      event.preventDefault();
-      closeAdminPanel();
-    });
+    // Clique do item "Painel administrativo".
+    // Usamos pointerup e click para funcionar bem tanto no desktop quanto no celular.
+    openAdminButton.addEventListener("pointerup", handleOpenAdminPanel, true);
+    openAdminButton.addEventListener("click", handleOpenAdminPanel, true);
+
+    closeAdminButton?.addEventListener("click", closeAdminPanel);
 
     document.addEventListener("click", (event) => {
       if (!moreMenuDropdown.hidden && !event.target.closest(".admin-menu-wrap")) {
