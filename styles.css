@@ -2268,3 +2268,26 @@ details summary {
 .admin-panel-overlay[aria-hidden="false"] .embedded-admin-shell {
   display: block;
 }
+
+/* Correção: menu dos 3 pontinhos sobreposto ao conteúdo.
+   O hero precisa permitir que o dropdown ultrapasse a área do cabeçalho,
+   e o menu recebe z-index alto para aparecer acima das etapas e do conteúdo. */
+.hero {
+  overflow: visible;
+  z-index: 50;
+}
+
+.progress-area,
+.content-area,
+.footer-actions {
+  position: relative;
+  z-index: 1;
+}
+
+.admin-menu-wrap {
+  z-index: 1000;
+}
+
+.more-menu-dropdown {
+  z-index: 9999;
+}
